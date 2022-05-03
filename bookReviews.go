@@ -117,7 +117,7 @@ func getWeightedAvg(valOne, valTwo float64, countOne, countTwo int) (rating floa
 	return
 }
 
-func getBookRating(items []item) (float64, int) {
+func getBookRating(items []item, searchTitle string) (float64, int) {
 	var (
 		avgRating  float64
 		numReviews int
@@ -126,7 +126,12 @@ func getBookRating(items []item) (float64, int) {
 	for _, item := range items {
 		//if we know the language, make sure it's english
 		lang := item.VolumeInfo.Language
+		title := strings.ToLower(item.VolumeInfo.Title)
 		if len(lang) > 0 && lang != "en" {
+			continue
+		}
+		if !strings.Contains(title, searchTitle) &&
+			!strings.Contains(searchTitle, title) {
 			continue
 		}
 
@@ -135,17 +140,20 @@ func getBookRating(items []item) (float64, int) {
 		avgRating = getWeightedAvg(avgRating, itemRating, numReviews,
 			itemNumReviews)
 		numReviews += item.VolumeInfo.RatingsCount
-		/*
-			title = item.VolumeInfo.Title
-			author = item.VolumeInfo.Authors
-			fmt.Printf("%s, %v\n", title, author)
-		*/
+
+		//title := item.VolumeInfo.Title
+		author := item.VolumeInfo.Authors
+		fmt.Printf("%s, %v\n", title, author)
+
 	}
 	return avgRating, numReviews
 }
 
 func main() {
 
+	//TODO examine why the manager's path and king solomon's mines have no results
+	//TODO comparing names is bad for three-body problem (hyphen)
+	//TODO performance issue? Confirmed. Paradise lost is example that takes a while.
 	if err := config.ReadConfig(); err != nil {
 		fmt.Println(err.Error())
 		return
@@ -165,13 +173,18 @@ func main() {
 			fmt.Println(err.Error())
 		}
 		//fmt.Printf("%v\n", items)
-		avgRating, numReviews := getBookRating(items.Items)
-		//get author, title, isbn from the first work. Assume all same (bad)
-		title := items.Items[0].VolumeInfo.Title
-		author := items.Items[0].VolumeInfo.Authors
-		isbn := getIsbn(items.Items[0].VolumeInfo.Ids)
+		avgRating, numReviews := getBookRating(items.Items, strings.ToLower(bookInfo[0]))
 
-		fmt.Printf("Title: %s\n\tAuthor: %s\n\tISBN: %s\n\t Review: %.2f\n\t"+
+		//get author, title. Default to input, else first with isbn
+		title, author, isbn := bookInfo[0], []string{bookInfo[1]}, ""
+		for i := 0; i < len(items.Items) && isbn == ""; i++ {
+			title = items.Items[i].VolumeInfo.Title
+			author = items.Items[i].VolumeInfo.Authors
+			isbn = getIsbn(items.Items[i].VolumeInfo.Ids)
+			//fmt.Printf("%d, %d, %s\n", len(items.Items), i, isbn)
+		}
+
+		fmt.Printf("Title: %s\n\tAuthor: %s\n\tISBN: %s\n\tReview: %.2f\n\t"+
 			"Review Count: %d\n\n", title, author, isbn, avgRating, numReviews)
 	}
 
