@@ -117,12 +117,10 @@ func getWeightedAvg(valOne, valTwo float64, countOne, countTwo int) (rating floa
 	return
 }
 
-func getBookInfo(items []item) (float64, int, string, []string, string) {
+func getBookRating(items []item) (float64, int) {
 	var (
-		avgRating   float64
-		numReviews  int
-		title, isbn string
-		author      []string
+		avgRating  float64
+		numReviews int
 	)
 
 	for _, item := range items {
@@ -142,13 +140,8 @@ func getBookInfo(items []item) (float64, int, string, []string, string) {
 			author = item.VolumeInfo.Authors
 			fmt.Printf("%s, %v\n", title, author)
 		*/
-		if len(isbn) == 0 {
-			title = item.VolumeInfo.Title
-			author = item.VolumeInfo.Authors
-			isbn = getIsbn(item.VolumeInfo.Ids)
-		}
 	}
-	return avgRating, numReviews, title, author, isbn
+	return avgRating, numReviews
 }
 
 func main() {
@@ -172,13 +165,12 @@ func main() {
 			fmt.Println(err.Error())
 		}
 		//fmt.Printf("%v\n", items)
-		avgRating, numReviews, title, author, isbn := getBookInfo(items.Items)
-		if len(title) < 1 {
-			title = bookInfo[0]
-		}
-		if len(title) < 1 {
-			author = []string{bookInfo[1]}
-		}
+		avgRating, numReviews := getBookRating(items.Items)
+		//get author, title, isbn from the first work. Assume all same (bad)
+		title := items.Items[0].VolumeInfo.Title
+		author := items.Items[0].VolumeInfo.Authors
+		isbn := getIsbn(items.Items[0].VolumeInfo.Ids)
+
 		fmt.Printf("Title: %s\n\tAuthor: %s\n\tISBN: %s\n\t Review: %.2f\n\t"+
 			"Review Count: %d\n\n", title, author, isbn, avgRating, numReviews)
 	}
