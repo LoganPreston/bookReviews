@@ -56,6 +56,27 @@ func readBooks() []string {
 	return books
 }
 
+func getUrl(book, author string) string {
+	//get isbn from librarything?
+	//libraryThingUrlBase := "http://librarything.com/api/thingTitle/"
+
+	url := "https://www.googleapis.com/books/v1/volumes?q="
+	book = strings.Replace(book, " ", "%20", -1)
+	//book = "\"" + book + "\""
+	url += "intitle:" + book
+
+	if len(author) > 0 {
+		author = strings.Replace(author, " ", "%20", -1)
+		//author = "\"" + author + "\""
+		url += "+inauthor:" + author
+	}
+
+	url += "&langRestrict=\"en\""
+	url += "&key=" + config.Key
+	//fmt.Printf("%s\n", url)
+	return url
+}
+
 func getUrlInfo(url string) ([]byte, error) {
 	var (
 		response     *http.Response
@@ -75,95 +96,93 @@ func getUrlInfo(url string) ([]byte, error) {
 	return responseData, nil
 }
 
+func getIsbn(Ids []identifier) string {
+	var isbn string
+	for _, id := range Ids {
+		if id.TypeName == "ISBN_13" {
+			isbn = id.Identifier
+			break
+		}
+	}
+
+	return isbn
+}
+
+func getWeightedAvg(valOne, valTwo float64, countOne, countTwo int) (rating float64) {
+	if countOne+countTwo == 0 {
+		return
+	}
+	rating = valOne*float64(countOne) + valTwo*float64(countTwo)
+	rating /= float64(countOne + countTwo)
+	return
+}
+
+func getBookInfo(items []item) (float64, int, string, []string, string) {
+	var (
+		avgRating   float64
+		numReviews  int
+		title, isbn string
+		author      []string
+	)
+
+	for _, item := range items {
+		//if we know the language, make sure it's english
+		lang := item.VolumeInfo.Language
+		if len(lang) > 0 && lang != "en" {
+			continue
+		}
+
+		itemRating := item.VolumeInfo.AverageRating
+		itemNumReviews := item.VolumeInfo.RatingsCount
+		avgRating = getWeightedAvg(avgRating, itemRating, numReviews,
+			itemNumReviews)
+		numReviews += item.VolumeInfo.RatingsCount
+
+		/*
+			title = item.VolumeInfo.Title
+			author = item.VolumeInfo.Authors
+			fmt.Printf("%s, %v\n", title, author)
+		*/
+		if len(isbn) == 0 {
+			title = item.VolumeInfo.Title
+			author = item.VolumeInfo.Authors
+			isbn = getIsbn(item.VolumeInfo.Ids)
+		}
+	}
+	return avgRating, numReviews, title, author, isbn
+}
+
 func main() {
-	//Just go get it from google, need to format the OAuth/api key to get access to query
+	var (
+		items           itemsInfo
+		url             string
+		bookInfo, books []string
+		responseBytes   []byte
+	)
+
 	if err := config.ReadConfig(); err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	googleKey := config.Key
-	books := readBooks()
 
-	//fmt.Printf("%v\n", books)
-	//get isbn from librarything
-	//libraryThingUrlBase := "http://librarything.com/api/thingTitle/"
-	googleUrlBase := "https://www.googleapis.com/books/v1/volumes?q=intitle:"
-
-	//var isbn bookIsbnInfo
-	var (
-		items itemsInfo
-		avgRating float64
-		numReviews int
-		title, isbn, url string
-	)
+	books = readBooks()
 
 	for _, book := range books {
 		items = itemsInfo{}
-		bookInfo := strings.Split(book, "|")
-		book = strings.Replace(bookInfo[0], " ", "%20", -1)
-		//book = "\"" + book + "\""
-		//TODO need to refine...
-		//check length of title maybe?
-		url = googleUrlBase + book
-		if len(bookInfo) > 1 {
-			author := strings.Replace(bookInfo[1], " ", "%20", -1)
-			//author = "\"" + author + "\""
-			url += "+inauthor:" + author
-		}
-		url += "&langRestrict=\"en\""
-		url += "&key=" + googleKey
-		fmt.Printf("%s\n", url)
-		responseBytes, _ := getUrlInfo(url)
+		bookInfo = strings.Split(book, "|")
+		url = getUrl(bookInfo[0], bookInfo[1])
+		responseBytes, _ = getUrlInfo(url)
+
 		//fmt.Printf("%v\n", responseBytes)
 		if err := json.Unmarshal(responseBytes, &items); err != nil {
 			fmt.Println(err.Error())
 		}
 		//fmt.Printf("%v\n", items)
-		avgRating, numReviews = 0.0, 0
-		isbn, title = "", ""
-		for _, item := range items.Items {
-			if item.VolumeInfo.Language != "en" {
-				continue
-			}
-			itemRating := item.VolumeInfo.AverageRating
-			itemNumReviews := item.VolumeInfo.RatingsCount
-			if avgRating > 0 {
-				avgRating = (avgRating*float64(numReviews) +
-					itemRating*float64(itemNumReviews)) /
-					float64(numReviews+itemNumReviews)
-			} else {
-				avgRating = itemRating
-			}
-
-			numReviews += item.VolumeInfo.RatingsCount
-			title = item.VolumeInfo.Title
-			bookAuthor := item.VolumeInfo.Authors
-			fmt.Printf("%s, %v\n",title, bookAuthor)
-			if len(isbn) == 0 {
-				for _, id := range item.VolumeInfo.Ids {
-					if id.TypeName == "ISBN_13" {
-						isbn = id.Identifier
-						break
-					}
-				}
-			}
-		}
-		fmt.Printf("Title: %s\n\tISBN: %s\n\t Review: %.2f"+
-			"\n\t Review Count: %d\n\n", title, isbn,
+		avgRating, numReviews, title, author, isbn := getBookInfo(items.Items)
+		fmt.Printf("Title: %s\n\tAuthor: %s\n\t"+
+			"ISBN: %s\n\t Review: %.2f\n\t"+
+			"Review Count: %d\n\n", title, author, isbn,
 			avgRating, numReviews)
-		/*
-			url := libraryThingUrlBase + book
-			fmt.Printf("%s\n",url)
-			responseBytes, _ := getUrlInfo(url)
-			if len(responseBytes) == 0 {
-				continue
-			}
-			fmt.Printf("%v\n",responseBytes)
-			if err := xml.Unmarshal(responseBytes, &isbn); err != nil {
-				log.Fatal(err)
-			}
-			fmt.Printf("%#v\n", isbn)
-		*/
 	}
 
 	//use isbn to get reviews from google books
