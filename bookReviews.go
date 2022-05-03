@@ -137,7 +137,6 @@ func getBookInfo(items []item) (float64, int, string, []string, string) {
 		avgRating = getWeightedAvg(avgRating, itemRating, numReviews,
 			itemNumReviews)
 		numReviews += item.VolumeInfo.RatingsCount
-
 		/*
 			title = item.VolumeInfo.Title
 			author = item.VolumeInfo.Authors
@@ -153,25 +152,20 @@ func getBookInfo(items []item) (float64, int, string, []string, string) {
 }
 
 func main() {
-	var (
-		items           itemsInfo
-		url             string
-		bookInfo, books []string
-		responseBytes   []byte
-	)
 
 	if err := config.ReadConfig(); err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
-	books = readBooks()
+	books := readBooks()
 
 	for _, book := range books {
-		items = itemsInfo{}
-		bookInfo = strings.Split(book, "|")
-		url = getUrl(bookInfo[0], bookInfo[1])
-		responseBytes, _ = getUrlInfo(url)
+
+		items := itemsInfo{}
+		bookInfo := strings.Split(book, "|")
+		url := getUrl(bookInfo[0], bookInfo[1])
+		responseBytes, _ := getUrlInfo(url)
 
 		//fmt.Printf("%v\n", responseBytes)
 		if err := json.Unmarshal(responseBytes, &items); err != nil {
@@ -179,10 +173,14 @@ func main() {
 		}
 		//fmt.Printf("%v\n", items)
 		avgRating, numReviews, title, author, isbn := getBookInfo(items.Items)
-		fmt.Printf("Title: %s\n\tAuthor: %s\n\t"+
-			"ISBN: %s\n\t Review: %.2f\n\t"+
-			"Review Count: %d\n\n", title, author, isbn,
-			avgRating, numReviews)
+		if len(title) < 1 {
+			title = bookInfo[0]
+		}
+		if len(title) < 1 {
+			author = []string{bookInfo[1]}
+		}
+		fmt.Printf("Title: %s\n\tAuthor: %s\n\tISBN: %s\n\t Review: %.2f\n\t"+
+			"Review Count: %d\n\n", title, author, isbn, avgRating, numReviews)
 	}
 
 	//use isbn to get reviews from google books
