@@ -1,3 +1,3 @@
-module bookReviews.go
+module bookReviews
 
 go 1.18

@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 )
 
-var Token string
+var Key string
 
 type configStruct struct {
 	Key     string `json:"key"`
@@ -33,7 +33,7 @@ func ReadConfig() error {
 	}
 
 	//unpack struct
-	Token = config.Token
+	Key = config.Key
 
 	//bot info set up successfully at this point, return nothing if success.
 	return nil
