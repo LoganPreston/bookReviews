@@ -122,6 +122,7 @@ func getBookRating(items []item, searchTitle string) (float64, int, int) {
 
 	searchTitle = strings.ToLower(searchTitle)
 	searchTitle = strings.Replace(searchTitle, ",", "", -1)
+	searchTitle = strings.Replace(searchTitle, "'", "", -1)
 	searchTitle = strings.Replace(searchTitle, "-", " ", -1)
 
 	for _, item := range items {
@@ -133,11 +134,12 @@ func getBookRating(items []item, searchTitle string) (float64, int, int) {
 
 		title := strings.ToLower(item.VolumeInfo.Title)
 		title = strings.Replace(title, ",", "", -1)
+		title = strings.Replace(title, "'", "", -1)
 		title = strings.Replace(title, "-", " ", -1)
 
 		if !strings.Contains(title, searchTitle) &&
 			!strings.Contains(searchTitle, title) {
-			//fmt.Printf("this title was sorted out: %s because it didn't match %s\n", title, searchTitle)
+			//fmt.Printf("\n\t sorted out: %s, expected %s\n", title, searchTitle)
 			continue
 		}
 
@@ -163,27 +165,33 @@ func main() {
 		return
 	}
 
-	file, err := os.Create("./booksOut.txt")
+	inFile, err := os.Open("books.txt")
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Fatal(err)
 	}
-	defer file.Close()
-	writer := bufio.NewWriter(file)
+	defer inFile.Close()
 
+	outFile, err := os.Create("./booksOut.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer outFile.Close()
+
+	writer := bufio.NewWriter(outFile)
 	line := "Title|Author|ISBN|Review|Review Count|Book Count\n"
 	if _, err := writer.WriteString(line); err != nil {
 		fmt.Println(err.Error())
 	}
 
-	books := readBooks()
-
-	for _, book := range books {
-
+	scanner := bufio.NewScanner(inFile)
+	for scanner.Scan() {
 		items := itemsInfo{}
-		bookInfo := strings.Split(book, "|")
-		url := getUrl(bookInfo[0], bookInfo[1])
 
-		fmt.Printf("Checking into %s by %s\n", bookInfo[0], bookInfo[1])
+		book := scanner.Text()
+		bookInfo := strings.Split(book, "|")
+		fmt.Printf("Checking %s by %s\n", bookInfo[0], bookInfo[1])
+
+		url := getUrl(bookInfo[0], bookInfo[1])
 		responseBytes, _ := getUrlInfo(url)
 
 		if err := json.Unmarshal(responseBytes, &items); err != nil {
@@ -206,6 +214,9 @@ func main() {
 		if err != nil {
 			fmt.Println(err.Error())
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
 	}
 	writer.Flush()
 }
