@@ -72,7 +72,7 @@ func getUrl(book, author string) string {
 	}
 
 	url += "&langRestrict=\"en\""
-	url += "&key=" + config.Key
+	//url += "&key=" + config.Key
 	//fmt.Printf("%s\n", url)
 	return url
 }
@@ -117,21 +117,31 @@ func getWeightedAvg(valOne, valTwo float64, countOne, countTwo int) (rating floa
 	return
 }
 
-func getBookRating(items []item, searchTitle string) (float64, int) {
+func getBookRating(items []item, searchTitle string) (float64, int, int) {
 	var (
 		avgRating  float64
 		numReviews int
+		bookCount  int
 	)
+
+	searchTitle = strings.ToLower(searchTitle)
+	searchTitle = strings.Replace(searchTitle, ",", "", -1)
+	searchTitle = strings.Replace(searchTitle, "-", " ", -1)
 
 	for _, item := range items {
 		//if we know the language, make sure it's english
 		lang := item.VolumeInfo.Language
-		title := strings.ToLower(item.VolumeInfo.Title)
 		if len(lang) > 0 && lang != "en" {
 			continue
 		}
+
+		title := strings.ToLower(item.VolumeInfo.Title)
+		title = strings.Replace(title, ",", "", -1)
+		title = strings.Replace(title, "-", " ", -1)
+
 		if !strings.Contains(title, searchTitle) &&
 			!strings.Contains(searchTitle, title) {
+			//fmt.Printf("this title was sorted out: %s because it didn't match %s\n", title, searchTitle)
 			continue
 		}
 
@@ -140,23 +150,32 @@ func getBookRating(items []item, searchTitle string) (float64, int) {
 		avgRating = getWeightedAvg(avgRating, itemRating, numReviews,
 			itemNumReviews)
 		numReviews += item.VolumeInfo.RatingsCount
+		bookCount++
 
 		//title := item.VolumeInfo.Title
-		author := item.VolumeInfo.Authors
-		fmt.Printf("%s, %v\n", title, author)
+		//author := item.VolumeInfo.Authors
+		//fmt.Printf("%s, %v\n", title, author)
 
 	}
-	return avgRating, numReviews
+	return avgRating, numReviews, bookCount
 }
 
 func main() {
 
-	//TODO examine why the manager's path and king solomon's mines have no results
-	//TODO comparing names is bad for three-body problem (hyphen)
-	//TODO performance issue? Confirmed. Paradise lost is example that takes a while.
 	if err := config.ReadConfig(); err != nil {
 		fmt.Println(err.Error())
 		return
+	}
+
+	file, err := os.Create("./booksOut.txt")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	writer := bufio.NewWriter(file)
+
+	line := "Title|Author|ISBN|Review|Review Count|Book Count\n"
+	if _, err := writer.WriteString(line); err != nil {
+		fmt.Println(err.Error())
 	}
 
 	books := readBooks()
@@ -166,6 +185,8 @@ func main() {
 		items := itemsInfo{}
 		bookInfo := strings.Split(book, "|")
 		url := getUrl(bookInfo[0], bookInfo[1])
+		//fmt.Printf("%s\n", url)
+		fmt.Printf("Checking into %s by %s\n", bookInfo[0], bookInfo[1])
 		responseBytes, _ := getUrlInfo(url)
 
 		//fmt.Printf("%v\n", responseBytes)
@@ -173,7 +194,7 @@ func main() {
 			fmt.Println(err.Error())
 		}
 		//fmt.Printf("%v\n", items)
-		avgRating, numReviews := getBookRating(items.Items, strings.ToLower(bookInfo[0]))
+		avgRating, numReviews, bookCount := getBookRating(items.Items, bookInfo[0])
 
 		//get author, title. Default to input, else first with isbn
 		title, author, isbn := bookInfo[0], []string{bookInfo[1]}, ""
@@ -184,9 +205,14 @@ func main() {
 			//fmt.Printf("%d, %d, %s\n", len(items.Items), i, isbn)
 		}
 
-		fmt.Printf("Title: %s\n\tAuthor: %s\n\tISBN: %s\n\tReview: %.2f\n\t"+
-			"Review Count: %d\n\n", title, author, isbn, avgRating, numReviews)
+		line := fmt.Sprintf("%s|%v|%s|%.2f|%d|%d\n", title, author, isbn,
+			avgRating, numReviews, bookCount)
+		_, err := writer.WriteString(line)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
 	}
+	writer.Flush()
 
 	//use isbn to get reviews from google books
 
