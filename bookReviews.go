@@ -36,26 +36,6 @@ type identifier struct {
 	Identifier string `json:"identifier"`
 }
 
-func readBooks() []string {
-	books := make([]string, 0, 100)
-
-	file, err := os.Open("books.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		books = append(books, scanner.Text())
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-	return books
-}
-
 func getUrl(book, author string) string {
 
 	url := "https://www.googleapis.com/books/v1/volumes?q="
