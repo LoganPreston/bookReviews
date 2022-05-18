@@ -178,9 +178,12 @@ func processBook(book string, ch chan string, wg *sync.WaitGroup) {
 
 	ch <- fmt.Sprintf("%s|%v|%s|%.2f|%d|%d\n",
 		title, author, isbn, avgRating, numReviews, bookCount)
+	return
 }
 
-func writeReviews(ch chan string) {
+func writeReviews(ch chan string, wg *sync.WaitGroup) {
+
+	defer wg.Done()
 
 	outFile, err := os.Create("./booksOut.txt")
 	if err != nil {
@@ -214,7 +217,7 @@ func main() {
 	defer inFile.Close()
 
 	ch := make(chan string)
-	go writeReviews(ch) //don't wait for this goroutine
+	go writeReviews(ch, &wg)
 	ch <- "Title|Author|ISBN|Review|Review Count|Book Count\n"
 
 	scanner := bufio.NewScanner(inFile)
@@ -222,13 +225,17 @@ func main() {
 		book := scanner.Text()
 		wg.Add(1)
 		go processBook(book, ch, &wg)
-		time.Sleep(100 * time.Millisecond) //try to avoid 429s
+		time.Sleep(50 * time.Millisecond) //try to avoid 429s
 	}
-
-	wg.Wait()
-	close(ch)
-
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
+
+	//wait for the writers to the channel
+	wg.Wait()
+
+	//wait for the reader to finish up and output cleanly
+	wg.Add(1)
+	close(ch)
+	wg.Wait()
 }
