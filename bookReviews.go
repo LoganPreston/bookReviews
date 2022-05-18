@@ -203,7 +203,7 @@ func writeReviews(ch chan string, wg *sync.WaitGroup) {
 
 func main() {
 
-	var wg sync.WaitGroup
+	var writeWg, readWg sync.WaitGroup
 
 	if err := config.ReadConfig(); err != nil {
 		fmt.Println(err.Error())
@@ -217,25 +217,25 @@ func main() {
 	defer inFile.Close()
 
 	ch := make(chan string)
-	go writeReviews(ch, &wg)
+	readWg.Add(1)
+	go writeReviews(ch, &readWg)
 	ch <- "Title|Author|ISBN|Review|Review Count|Book Count\n"
 
 	scanner := bufio.NewScanner(inFile)
 	for scanner.Scan() {
 		book := scanner.Text()
-		wg.Add(1)
-		go processBook(book, ch, &wg)
-		time.Sleep(50 * time.Millisecond) //try to avoid 429s
+		writeWg.Add(1)
+		go processBook(book, ch, &writeWg)
+		time.Sleep(100 * time.Millisecond) //try to avoid 429s
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 
 	//wait for the writers to the channel
-	wg.Wait()
+	writeWg.Wait()
 
 	//wait for the reader to finish up and output cleanly
-	wg.Add(1)
 	close(ch)
-	wg.Wait()
+	readWg.Wait()
 }
