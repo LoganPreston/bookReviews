@@ -232,7 +232,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	//wait for the writers to the channel
+	//wait for the writers to the channel 
 	writeWg.Wait()
 
 	//wait for the reader to finish up and output cleanly
