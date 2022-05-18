@@ -123,9 +123,15 @@ func getBookRating(items []item, searchTitle string) (float64, int, int) {
 		title = strings.Replace(title, "'", "", -1)
 		title = strings.Replace(title, "-", " ", -1)
 
-		if !strings.Contains(title, searchTitle) &&
+		lenSearchTitle := len(searchTitle)
+		lenTitle := len(title)
+
+		if lenTitle < lenSearchTitle &&
+			!strings.Contains(title, searchTitle) {
+			continue
+		}
+		if lenSearchTitle < lenTitle &&
 			!strings.Contains(searchTitle, title) {
-			//fmt.Printf("\n\t sorted out: %s, expected %s\n", title, searchTitle)
 			continue
 		}
 
@@ -158,7 +164,9 @@ func processBook(book string, ch chan string, wg *sync.WaitGroup) {
 		fmt.Println(err.Error())
 	}
 
-	avgRating, numReviews, bookCount := getBookRating(items.Items, bookInfo[0])
+	avgRating, numReviews, bookCount :=
+		getBookRating(items.Items, bookInfo[0])
+
 	//get author, title. Default to input, else first with isbn
 	title, author, isbn := bookInfo[0], []string{bookInfo[1]}, ""
 	for i := 0; i < len(items.Items) && isbn == ""; i++ {
@@ -171,7 +179,7 @@ func processBook(book string, ch chan string, wg *sync.WaitGroup) {
 		title, author, isbn, avgRating, numReviews, bookCount)
 }
 
-func writeChannel(ch chan string, wg *sync.WaitGroup) {
+func writeReviews(ch chan string) {
 
 	outFile, err := os.Create("./booksOut.txt")
 	if err != nil {
@@ -180,11 +188,7 @@ func writeChannel(ch chan string, wg *sync.WaitGroup) {
 	defer outFile.Close()
 
 	writer := bufio.NewWriter(outFile)
-	for {
-		line, ok := <-ch
-		if !ok {
-			break
-		}
+	for line := range ch {
 		if _, err := writer.WriteString(line); err != nil {
 			fmt.Println(err.Error())
 		}
@@ -209,15 +213,15 @@ func main() {
 	defer inFile.Close()
 
 	ch := make(chan string)
-	go writeChannel(ch, &wg)
+	go writeReviews(ch) //don't wait for this goroutine
 	ch <- "Title|Author|ISBN|Review|Review Count|Book Count\n"
 
 	scanner := bufio.NewScanner(inFile)
 	for scanner.Scan() {
 		book := scanner.Text()
 		wg.Add(1)
-		time.Sleep(50 * time.Millisecond) //try to avoid 429s
 		go processBook(book, ch, &wg)
+		time.Sleep(250 * time.Millisecond) //try to avoid 429s
 	}
 
 	wg.Wait()
