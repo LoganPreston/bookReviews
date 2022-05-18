@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bookReviews/config"
+
 	"bufio"
 	"encoding/json"
 	"fmt"
@@ -9,8 +11,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
-
-	"bookReviews/config"
+	"sync"
+	"time"
 )
 
 type itemsInfo struct {
@@ -62,6 +64,10 @@ func getUrlInfo(url string) ([]byte, error) {
 	//get the initial info
 	if response, err = http.Get(url); err != nil {
 		return []byte{}, err
+	}
+
+	if response.StatusCode != 200 {
+		fmt.Printf("\tStatus Code %d received\n", response.StatusCode)
 	}
 
 	//read the response
@@ -138,7 +144,58 @@ func getBookRating(items []item, searchTitle string) (float64, int, int) {
 	return avgRating, numReviews, bookCount
 }
 
+func processBook(book string, ch chan string, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
+	items := itemsInfo{}
+	bookInfo := strings.Split(book, "|")
+	fmt.Printf("Checking %s by %s\n", bookInfo[0], bookInfo[1])
+
+	url := getUrl(bookInfo[0], bookInfo[1])
+	responseBytes, _ := getUrlInfo(url)
+	if err := json.Unmarshal(responseBytes, &items); err != nil {
+		fmt.Println(err.Error())
+	}
+
+	avgRating, numReviews, bookCount := getBookRating(items.Items, bookInfo[0])
+	//get author, title. Default to input, else first with isbn
+	title, author, isbn := bookInfo[0], []string{bookInfo[1]}, ""
+	for i := 0; i < len(items.Items) && isbn == ""; i++ {
+		title = items.Items[i].VolumeInfo.Title
+		author = items.Items[i].VolumeInfo.Authors
+		isbn = getIsbn(items.Items[i].VolumeInfo.Ids)
+	}
+
+	ch <- fmt.Sprintf("%s|%v|%s|%.2f|%d|%d\n",
+		title, author, isbn, avgRating, numReviews, bookCount)
+}
+
+func writeChannel(ch chan string, wg *sync.WaitGroup) {
+
+	outFile, err := os.Create("./booksOut.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer outFile.Close()
+
+	writer := bufio.NewWriter(outFile)
+	for {
+		line, ok := <-ch
+		if !ok {
+			break
+		}
+		if _, err := writer.WriteString(line); err != nil {
+			fmt.Println(err.Error())
+		}
+	}
+	writer.Flush()
+	return
+}
+
 func main() {
+
+	var wg sync.WaitGroup
 
 	if err := config.ReadConfig(); err != nil {
 		fmt.Println(err.Error())
@@ -151,52 +208,22 @@ func main() {
 	}
 	defer inFile.Close()
 
-	outFile, err := os.Create("./booksOut.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer outFile.Close()
-
-	writer := bufio.NewWriter(outFile)
-	line := "Title|Author|ISBN|Review|Review Count|Book Count\n"
-	if _, err := writer.WriteString(line); err != nil {
-		fmt.Println(err.Error())
-	}
+	ch := make(chan string)
+	go writeChannel(ch, &wg)
+	ch <- "Title|Author|ISBN|Review|Review Count|Book Count\n"
 
 	scanner := bufio.NewScanner(inFile)
 	for scanner.Scan() {
-		items := itemsInfo{}
-
 		book := scanner.Text()
-		bookInfo := strings.Split(book, "|")
-		fmt.Printf("Checking %s by %s\n", bookInfo[0], bookInfo[1])
-
-		url := getUrl(bookInfo[0], bookInfo[1])
-		responseBytes, _ := getUrlInfo(url)
-
-		if err := json.Unmarshal(responseBytes, &items); err != nil {
-			fmt.Println(err.Error())
-		}
-
-		avgRating, numReviews, bookCount := getBookRating(items.Items, bookInfo[0])
-
-		//get author, title. Default to input, else first with isbn
-		title, author, isbn := bookInfo[0], []string{bookInfo[1]}, ""
-		for i := 0; i < len(items.Items) && isbn == ""; i++ {
-			title = items.Items[i].VolumeInfo.Title
-			author = items.Items[i].VolumeInfo.Authors
-			isbn = getIsbn(items.Items[i].VolumeInfo.Ids)
-		}
-
-		line := fmt.Sprintf("%s|%v|%s|%.2f|%d|%d\n",
-			title, author, isbn, avgRating, numReviews, bookCount)
-		_, err := writer.WriteString(line)
-		if err != nil {
-			fmt.Println(err.Error())
-		}
+		wg.Add(1)
+		time.Sleep(50 * time.Millisecond) //try to avoid 429s
+		go processBook(book, ch, &wg)
 	}
+
+	wg.Wait()
+	close(ch)
+
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
-	writer.Flush()
 }
