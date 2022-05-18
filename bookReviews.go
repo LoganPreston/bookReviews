@@ -67,7 +67,8 @@ func getUrlInfo(url string) ([]byte, error) {
 	}
 
 	if response.StatusCode != 200 {
-		fmt.Printf("\tStatus Code %d received\n", response.StatusCode)
+		fmt.Printf("\tStatus Code %d received, URL: %s\n",
+			response.StatusCode, url)
 	}
 
 	//read the response
@@ -221,7 +222,7 @@ func main() {
 		book := scanner.Text()
 		wg.Add(1)
 		go processBook(book, ch, &wg)
-		time.Sleep(250 * time.Millisecond) //try to avoid 429s
+		time.Sleep(100 * time.Millisecond) //try to avoid 429s
 	}
 
 	wg.Wait()
