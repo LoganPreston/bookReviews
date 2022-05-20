@@ -178,7 +178,6 @@ func processBook(book string, ch chan string, wg *sync.WaitGroup) {
 
 	ch <- fmt.Sprintf("%s|%v|%s|%.2f|%d|%d\n",
 		title, author, isbn, avgRating, numReviews, bookCount)
-	return
 }
 
 func writeReviews(ch chan string, wg *sync.WaitGroup) {
@@ -198,7 +197,6 @@ func writeReviews(ch chan string, wg *sync.WaitGroup) {
 		}
 	}
 	writer.Flush()
-	return
 }
 
 func main() {
@@ -232,7 +230,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	//wait for the writers to the channel 
+	//wait for the writers to the channel
 	writeWg.Wait()
 
 	//wait for the reader to finish up and output cleanly
